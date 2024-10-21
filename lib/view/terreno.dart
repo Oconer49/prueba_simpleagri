@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:prueba_simpleagri/widgets/dialogo.dart';
 import 'package:prueba_simpleagri/controlador/terrenos.dart';
 import 'package:prueba_simpleagri/model/terrenos.dart';
 import 'package:prueba_simpleagri/view/menu.dart';
-import 'package:prueba_simpleagri/widgets/Dialogo.dart';
 import 'package:prueba_simpleagri/widgets/button_pill.dart';
 import 'package:prueba_simpleagri/widgets/header.dart';
 
@@ -13,62 +13,78 @@ class Terreno extends StatefulWidget {
 }
 
 class _TerrenoState extends State<Terreno> {
-
-  bool loading = true, showHistory = false;
-  late String system, user, dateDownload;
-  int historyCount = 0;
-  String history = '';
+  bool loading = true;
   TextEditingController controler_texto_busqueda = TextEditingController();
   ControladorTerrenos controllerterreno = ControladorTerrenos();
   List<ObjetoTerreno> lista_data = [];
+  List<ObjetoTerreno> lista_auxiliar = [];
   int _selectedIndex = 0;
-  final List<String> _options = [ "Todos", 'Activo', 'Inactivo', 'Cerrado' ];
+  final List<String> _options = ["Todos", 'Activo', 'Inactivo', 'Cerrado'];
 
   @override
   void initState() {
-    Timer(  Duration(seconds: 1), () => { cargar_tabla() } );
     super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
+    Timer(Duration(seconds: 1), cargar_tabla);
   }
 
   Future<void> cargar_tabla() async {
-
-    lista_data = await controllerterreno.listadoTabla( context: context);
-    
+    lista_data = await controllerterreno.listadoTabla(context: context);
+    lista_auxiliar = List.from(lista_data);
     setState(() {
-        loading = false;
+      loading = false;
     });
-    
   }
 
+Future<void> _search() async {
+  if (controler_texto_busqueda.text.isEmpty) {
+  Dialogo().showAlert(context,"Por favor ingrese un texto para la busqueda");
+  } else {
+List<ObjetoTerreno> listaFiltrada = lista_auxiliar.where((terreno) {
+      bool estadoCoincide = _selectedIndex == 0 ||
+          (terreno.status == '0' && _selectedIndex == 1) ||
+          (terreno.status == '1' && _selectedIndex == 2) ||
+          (terreno.status == '2' && _selectedIndex == 3);
 
-  Future<void> _search() async {
-    
+      bool textoCoincide = controler_texto_busqueda.text.isEmpty ||
+          terreno.terrain.toLowerCase().contains(controler_texto_busqueda.text.toLowerCase()) ||
+          terreno.crop.toLowerCase().contains(controler_texto_busqueda.text.toLowerCase());
+      return estadoCoincide && textoCoincide;
+    }).toList();
+    setState(() {
+      lista_data = listaFiltrada;
+      lista_auxiliar = List.from(lista_data);
+    });
+  }
+}
 
-    if ( controler_texto_busqueda.text.isEmpty ) {
-
-      Dialogo().showAlert(context,"Por favor ingrese un texto para la busqueda");
-
+  void cambio_estado(int index) {
+    if (index == 0) {
+      setState(() {
+        lista_data = List.from(lista_auxiliar);
+      });
     } else {
-
-      //aqui realizar lo necesario para limpiar la lista y obtener los registros nuevos 
-
-
-
-      var dd = await controllerterreno.consultar( context: context, texto_busqueda: controler_texto_busqueda.text );
-      
-      setState(() { });
-    
+        String estadoFiltrado = '';
+        switch (index) {
+          case 1:
+            estadoFiltrado = '0'; 
+            break;
+          case 2:
+            estadoFiltrado = '1'; 
+            break;
+          case 3:
+            estadoFiltrado = '2'; 
+            break;
+        }
+      setState(() {
+        lista_data = lista_auxiliar
+            .where((terreno) => terreno.status == estadoFiltrado)
+            .toList();
+      });
     }
+    setState(() {
+      _selectedIndex = index;
+    });
   }
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -83,72 +99,54 @@ class _TerrenoState extends State<Terreno> {
         ),
       ),
       drawer: Menu(),
-      body:  loading == true
+      body: loading
           ? const Center(child: CircularProgressIndicator())
-          :ListView(
+          : ListView(
               padding: const EdgeInsets.all(12.0),
               children: [
-
                 TextFormField(
                   controller: controler_texto_busqueda,
-                  obscureText:  false,
+                  obscureText: false,
                   textAlign: TextAlign.center,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: Colors.white,
-                    labelText: "Texto Busqueda",
-                    hintText: "Texto Busqueda",
-                  ), ),
+                    labelText: "Texto Búsqueda",
+                    hintText: "Texto Búsqueda",
+                  ),
+                ),
                 SizedBox(height: 20),
                 ButtonPill(
                   text: 'Buscar',
-                  onPressed: () async {
-                    _search();
-                  },
+                  onPressed: _search,
                 ),
                 ButtonPill(
-                  text: 'Limpíar filtro',
+                  text: 'Limpiar filtro',
                   onPressed: () async {
-                    cargar_tabla();
+                    await cargar_tabla();
+                    setState(() {
+                      _selectedIndex = 0;
+                      controler_texto_busqueda.clear();
+                      lista_data = List.from(lista_auxiliar);
+                    });
                   },
                 ),
                 SizedBox(height: 20),
-
-                Center( 
-                  child:
-                  ToggleButtons(
+                Center(
+                  child: ToggleButtons(
                     isSelected: List.generate(_options.length, (index) => index == _selectedIndex),
                     onPressed: (int index) {
-
-                      //realiza una funcion que se llame ( cambio_estado ) que tenga un parametro que reciba el valor de (index)
-                      //debe realizar  una lista auxiliar para que pueda contener los datos originales y los datos de la busqueda
-                      //recuerden que el estado "Todos" no exite entonces debe aplicar algo para que la tabla cargue todos los registros de nuevo
-                      //estos registros se evaluan sobre temporales aqui no hay webservices.
-                      int parameter = 0;
-                      switch(index){
-                        case 0:
-                          parameter = 3; //todos
-                          break;
-                        case 1:
-                          parameter = 0; //activos
-                          break;
-                        case 2:
-                          parameter = 1; //inactivos
-                          break;
-                        case 3:
-                          parameter = 2; //cerrado
-                          break;
-                      }
-
-                      setState(() {
-                        _selectedIndex = index;
-                      });
+                      cambio_estado(index);
                     },
-                    children: _options.map( (String label) =>  Row( children: [ SizedBox(width: 10),Text(label),SizedBox(width: 10) ], )  ).toList(),
-                  ) ,
+                    children: _options.map((String label) => Row(
+                      children: [
+                        SizedBox(width: 10),
+                        Text(label),
+                        SizedBox(width: 10),
+                      ],
+                    )).toList(),
+                  ),
                 ),
-
-                //titulo de la tabla
                 SizedBox(height: 20),
                 Container(
                   alignment: Alignment.centerLeft,
@@ -165,56 +163,27 @@ class _TerrenoState extends State<Terreno> {
                   ),
                 ),
                 SizedBox(height: 20),
-
-                //tabla  del proyecto
-                SingleChildScrollView( 
+                SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: 
-                DataTable(
-                  decoration:  BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),  // this only make bottom rounded and not top
-                    color: Color.fromARGB(230, 229, 231, 230),
+                  child: DataTable(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: Color.fromARGB(230, 229, 231, 230),
+                    ),
+                    columns: const [
+                      DataColumn(label: Text("Terreno")),
+                      DataColumn(label: Text("Código")),
+                      DataColumn(label: Text("Estado")),
+                      DataColumn(label: Text("Fecha")),
+                    ],
+                    rows: lista_data.map((regt) => DataRow(cells: [
+                      DataCell(Text('${regt.terrain}')),
+                      DataCell(Text('${regt.crop}')),
+                      DataCell(Text('${regt.texto_status}')),
+                      DataCell(Text('${regt.creation_stamp}')),
+                    ])).toList(),
                   ),
-                  columns: const [ 
-                          DataColumn(
-                              label: Text("Terreno"),
-                              numeric: false,
-                          ),
-                          DataColumn(
-                              label: Text("Codigo"),
-                              numeric: false,
-                          ),
-                          DataColumn(
-                              label: Text("Estado"),
-                              numeric: false,
-                          ),
-                          DataColumn(
-                              label: Text("Fecha"),
-                              numeric: false,
-                          ),
-                        ],
-                  rows: lista_data.map(
-                    (regt) => DataRow(
-                              cells: [
-                                  DataCell(
-                                    Text( '${regt.terrain}'),
-                                                  ),
-                                  DataCell(
-                                    Text('${regt.crop}'),
-                                                  ),
-                                  DataCell(
-                                    Text('${regt.texto_status}'),
-                                                ),
-                                  DataCell(
-                                    Text('${regt.creation_stamp}'),
-                                  ),
-                                ]),
-                    ) .toList(),
                 )
-, )
-
-
-
               ],
             ),
     );
